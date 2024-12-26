@@ -92,6 +92,3 @@ Thank you for your interest in contributing to serde_kafka_primitives!
 ## License
 
 Licensed under the [Apache License, Version 2.0](LICENSE)  
-```
-
-
