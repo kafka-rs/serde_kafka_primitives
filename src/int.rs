@@ -1,14 +1,24 @@
+//! This module defines newtype wrappers for Kafka integer types (`i8`, `i16`,
+//! `i32`, `i64`). These wrappers implement Serde's `Serialize` and `Deserialize`
+//! traits, providing a Kafka-compatible representation of the core wire-format
+//! integer primitives.
 //!
-//! Contains newtype wrappers for Kafka integer types (`i8`, `i16`, `i32`, `i64`)
-//! that implement Serde's `Serialize` and `Deserialize`. These types are
-//! intended to represent the core Kafka wire-format integer primitives.
-//!
-//! For raw byte handling, consider using the [`KafkaSerializer`] and
-//! [`KafkaDeserializer`] structs from `io.rs` in this crate.
+//! # Important
+//! - Although these types implement `Serialize` and `Deserialize`, the actual
+//!   **byte order** you produce or consume will depend on the underlying
+//!   format and serializer. For direct, low-level I/O in **big-endian** format,
+//!   see the [`KafkaSerializer`] and [`KafkaDeserializer`] structs in
+//!   `io.rs` within this crate.
 
 use serde::{Deserialize, Serialize};
 
-/// A newtype for Kafka's 8-bit integer.
+/// A newtype for Kafka's 8-bit integer (`i8`).
+///
+/// # Serialization
+/// - Uses standard `i8` Serde serialization by default.
+/// - For big-endian byte-level I/O, consider using
+///   [`KafkaSerializer::write_i8`][crate::KafkaSerializer::write_i8] and
+///   [`KafkaDeserializer::read_i8`][crate::KafkaDeserializer::read_i8].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct KafkaInt8(pub i8);
 
@@ -17,9 +27,7 @@ impl Serialize for KafkaInt8 {
     where
         S: serde::Serializer,
     {
-        // In high-level usage, this is just i8 -> i8, but if you wanted
-        // to control exactly how the bytes are written, you'd integrate
-        // with a custom Serializer. For now, we let Serde handle it.
+        // We delegate to Serde's built-in i8 handling here.
         serializer.serialize_i8(self.0)
     }
 }
@@ -29,12 +37,19 @@ impl<'de> Deserialize<'de> for KafkaInt8 {
     where
         D: serde::Deserializer<'de>,
     {
+        // We simply deserialize as an i8, then wrap it.
         let val = i8::deserialize(deserializer)?;
         Ok(KafkaInt8(val))
     }
 }
 
-/// A newtype for Kafka's 16-bit integer (big-endian).
+/// A newtype for Kafka's 16-bit integer (`i16`), typically represented in big-endian.
+///
+/// # Serialization
+/// - Uses standard `i16` Serde serialization by default.
+/// - For low-level byte I/O in Kafka's expected big-endian order, use
+///   [`KafkaSerializer::write_i16`][crate::KafkaSerializer::write_i16] and
+///   [`KafkaDeserializer::read_i16`][crate::KafkaDeserializer::read_i16].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct KafkaInt16(pub i16);
 
@@ -57,7 +72,13 @@ impl<'de> Deserialize<'de> for KafkaInt16 {
     }
 }
 
-/// A newtype for Kafka's 32-bit integer (big-endian).
+/// A newtype for Kafka's 32-bit integer (`i32`), typically represented in big-endian.
+///
+/// # Serialization
+/// - Uses standard `i32` Serde serialization by default.
+/// - For low-level byte I/O in Kafka's expected big-endian order, use
+///   [`KafkaSerializer::write_i32`][crate::KafkaSerializer::write_i32] and
+///   [`KafkaDeserializer::read_i32`][crate::KafkaDeserializer::read_i32].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct KafkaInt32(pub i32);
 
@@ -80,7 +101,13 @@ impl<'de> Deserialize<'de> for KafkaInt32 {
     }
 }
 
-/// A newtype for Kafka's 64-bit integer (big-endian).
+/// A newtype for Kafka's 64-bit integer (`i64`), typically represented in big-endian.
+///
+/// # Serialization
+/// - Uses standard `i64` Serde serialization by default.
+/// - For low-level byte I/O in Kafka's expected big-endian order, use
+///   [`KafkaSerializer::write_i64`][crate::KafkaSerializer::write_i64] and
+///   [`KafkaDeserializer::read_i64`][crate::KafkaDeserializer::read_i64].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct KafkaInt64(pub i64);
 
@@ -105,24 +132,32 @@ impl<'de> Deserialize<'de> for KafkaInt64 {
 
 #[cfg(test)]
 mod tests {
+    //! This module contains unit tests that verify round-trip behavior
+    //! using the custom serializer/deserializer found in `io.rs`.
+    //!
+    //! The big-endian encoding is tested by writing integers with
+    //! [`KafkaSerializer`][crate::KafkaSerializer] and reading them back with
+    //! [`KafkaDeserializer`][crate::KafkaDeserializer].
+
     use super::*;
     use crate::{KafkaDeserializer, KafkaSerializer};
     use std::io::Cursor;
 
     #[test]
     fn test_i32_custom_roundtrip() {
+        // We use a Vec<u8> to capture bytes in memory.
         let mut buffer = Vec::new();
 
-        // Write a KafkaInt32 using your custom serializer
+        // Write a 32-bit integer (42) in big-endian format.
         {
             let mut ser = KafkaSerializer::new(&mut buffer);
-            ser.write_i32(42).unwrap();
+            ser.write_i32(42).expect("Failed to write i32");
         }
 
-        // Read it back with your custom deserializer
+        // Read it back and verify correctness.
         {
             let mut de = KafkaDeserializer::new(Cursor::new(&buffer));
-            let val = de.read_i32().unwrap();
+            let val = de.read_i32().expect("Failed to read i32");
             assert_eq!(val, 42);
         }
     }
